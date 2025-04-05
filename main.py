@@ -175,8 +175,8 @@ def show_menu():
             print(f"\n{WARN_COLOR}API данные не настроены.{Style.RESET_ALL}")
             print(f"{PRIMARY_COLOR}Давайте настроим их сейчас.{Style.RESET_ALL}\n")
             
-            api_id = input(f"{SECONDARY_COLOR}Введите API ID: {Style.RESET_ALL}")
-            api_hash = input(f"{SECONDARY_COLOR}Введите API Hash: {Style.RESET_ALL}")
+            api_id = clean_input(f"{SECONDARY_COLOR}Введите API ID: {Style.RESET_ALL}")
+            api_hash = clean_input(f"{SECONDARY_COLOR}Введите API Hash: {Style.RESET_ALL}")
             
             with open(ENV_FILE, 'w') as f:
                 f.write(f"API_ID={api_id}\nAPI_HASH={api_hash}")
@@ -233,7 +233,7 @@ def configure_settings():
         choice = get_key_press()
         
         if choice == "1":
-            api_id = input(f"{SECONDARY_COLOR}Введите API ID: {Style.RESET_ALL}")
+            api_id = clean_input(f"{SECONDARY_COLOR}Введите API ID: {Style.RESET_ALL}")
             with open(ENV_FILE, 'r') as f:
                 env_data = f.read()
             env_data = env_data.replace(f"API_ID={os.getenv('API_ID', '')}", f"API_ID={api_id}")
@@ -241,7 +241,7 @@ def configure_settings():
                 f.write(env_data)
             load_dotenv()
         elif choice == "2":
-            api_hash = input(f"{SECONDARY_COLOR}Введите API Hash: {Style.RESET_ALL}")
+            api_hash = clean_input(f"{SECONDARY_COLOR}Введите API Hash: {Style.RESET_ALL}")
             with open(ENV_FILE, 'r') as f:
                 env_data = f.read()
             env_data = env_data.replace(f"API_HASH={os.getenv('API_HASH', '')}", f"API_HASH={api_hash}")
@@ -284,14 +284,14 @@ def manage_messages(config):
         msg_choice = get_key_press()
         
         if msg_choice == "1":
-            new_msg = input(f"{SECONDARY_COLOR}Введите новое сообщение: {Style.RESET_ALL}")
+            new_msg = clean_input(f"{SECONDARY_COLOR}Введите новое сообщение: {Style.RESET_ALL}")
             config["messages"].append(new_msg)
             print(f"{SUCCESS_COLOR}Сообщение добавлено!{Style.RESET_ALL}")
             time.sleep(1)
         elif msg_choice == "2":
             if config["messages"]:
                 try:
-                    msg_num = int(input(f"{SECONDARY_COLOR}Введите номер сообщения для удаления: {Style.RESET_ALL}")) - 1
+                    msg_num = int(clean_input(f"{SECONDARY_COLOR}Введите номер сообщения для удаления: {Style.RESET_ALL}")) - 1
                     if 0 <= msg_num < len(config["messages"]):
                         deleted_msg = config["messages"].pop(msg_num)
                         print(f"{SUCCESS_COLOR}Удалено сообщение: {deleted_msg}{Style.RESET_ALL}")
@@ -337,7 +337,7 @@ def configure_delays(config):
             
         try:
             if choice in ["1", "2", "3", "4", "5", "6", "7", "8", "9"]:
-                delay = int(input(f"{SECONDARY_COLOR}Введите новое значение задержки в секундах: {Style.RESET_ALL}"))
+                delay = int(clean_input(f"{SECONDARY_COLOR}Введите новое значение задержки в секундах: {Style.RESET_ALL}"))
                 if delay < 0:
                     print(f"{ERROR_COLOR}Ошибка: задержка не может быть отрицательной{Style.RESET_ALL}")
                     print(f"{SECONDARY_COLOR}Нажмите любую клавишу для продолжения...{Style.RESET_ALL}")
@@ -572,6 +572,15 @@ def configure_voice_settings(chat_config):
                 
         elif choice == "0":
             break
+
+def clean_input(prompt=""):
+    """
+    Функция для корректного получения ввода от пользователя
+    с предварительной очисткой буфера и форматированием
+    """
+    sys.stdout.flush()  # Очищаем буфер вывода
+    print()  # Добавляем пустую строку для отделения
+    return input(prompt).strip()  # Удаляем лишние пробелы
 
 def clear_console():
     """Очистка консоли"""
