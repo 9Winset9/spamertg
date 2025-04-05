@@ -1,0 +1,8 @@
+/.env
+/bot.log
+/build
+/config.json
+/dist
+/session_name.session
+/voices
+/__pycache__
