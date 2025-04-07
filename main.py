@@ -22,7 +22,7 @@ import win32api
 load_dotenv()
 
 # Устанавливаем заголовок окна
-WINDOW_TITLE = "TGSPAMER v1.2"
+WINDOW_TITLE = "TGSPAMER v1.3"
 ctypes.windll.kernel32.SetConsoleTitleW(WINDOW_TITLE)
 
 # Инициализация colorama
@@ -75,13 +75,17 @@ def create_default_config():
             "chat_id": "@AnonRuBot",
             "enabled": True,
             "voice_enabled": False,
-            "voice_first": False
+            "voice_first": False,
+            "video_note_enabled": False,
+            "video_note_first": False
         },
         {
             "chat_id": "@anonimnyychatbot",
             "enabled": True,
             "voice_enabled": False,
-            "voice_first": False
+            "voice_first": False,
+            "video_note_enabled": False,
+            "video_note_first": False
         }
     ],
     "messages": ["привет"]
@@ -378,15 +382,17 @@ def configure_delays(config):
 
 def sync_chat_settings(config):
     """Синхронизация настроек между чатами"""
-    if not config["chats"]:
+    if not config["chats"] or len(config["chats"]) <= 1:
         return
-        
+    
     # Берем настройки из первого чата
-    first_chat = config["chats"][0]
     settings_to_sync = {
-        "voice_enabled": first_chat.get("voice_enabled", False),
-        "voice_first": first_chat.get("voice_first", False),
-        "voice_file": first_chat.get("voice_file", None)
+        "voice_enabled": config["chats"][0].get("voice_enabled", False),
+        "voice_first": config["chats"][0].get("voice_first", False),
+        "voice_file": config["chats"][0].get("voice_file", None),
+        "video_note_enabled": config["chats"][0].get("video_note_enabled", False),
+        "video_note_first": config["chats"][0].get("video_note_first", False),
+        "video_note_file": config["chats"][0].get("video_note_file", None)
     }
     
     # Применяем ко всем остальным чатам
@@ -418,14 +424,25 @@ def manage_chats(config):
                         voice_file = os.path.basename(voice_file)
                     voice_first = "голос→текст" if chat.get("voice_first", False) else "текст→голос"
                     voice_status = f" | {PRIMARY_COLOR}Голос: {voice_file} ({voice_first}){Style.RESET_ALL}"
-                print(f"{PRIMARY_COLOR}{i}. {chat['chat_id']} - {status}{voice_status}{Style.RESET_ALL}")
+                
+                # Добавляем информацию о видео-кружке
+                video_note_status = ""
+                if chat.get("video_note_enabled", False):
+                    video_note_file = chat.get("video_note_file", "Не выбран")
+                    if video_note_file and os.path.isabs(video_note_file):
+                        video_note_file = os.path.basename(video_note_file)
+                    video_note_first = "видео→текст" if chat.get("video_note_first", False) else "текст→видео"
+                    video_note_status = f" | {PRIMARY_COLOR}Видео: {video_note_file} ({video_note_first}){Style.RESET_ALL}"
+                
+                print(f"{PRIMARY_COLOR}{i}. {chat['chat_id']} - {status}{voice_status}{video_note_status}{Style.RESET_ALL}")
         
         print(f"\n{SECONDARY_COLOR}1. Включить/выключить чат")
         print(f"2. Настройка голосовых сообщений")
-        print(f"3. Включить/выключить синхронизацию")
+        print(f"3. Настройка видео-кружков")
+        print(f"4. Включить/выключить синхронизацию")
         print(f"0. Назад{Style.RESET_ALL}")
         
-        print(f"\n{PRIMARY_COLOR}Нажмите клавишу (0-3): {Style.RESET_ALL}")
+        print(f"\n{PRIMARY_COLOR}Нажмите клавишу (0-4): {Style.RESET_ALL}")
         choice = get_key_press()
         
         if choice == "1" and config["chats"]:
@@ -478,7 +495,31 @@ def manage_chats(config):
                         sync_chat_settings(config)
                     save_config(config)
         
-        elif choice == "3":
+        elif choice == "3" and config["chats"]:
+            clear_console()
+            print(LOGO)
+            print(f"\n{PRIMARY_COLOR}{'='*50}")
+            print(f"{SECONDARY_COLOR}=== Выберите чат для настройки видео-кружков ===")
+            print(f"{PRIMARY_COLOR}{'='*50}{Style.RESET_ALL}\n")
+            
+            for i, chat in enumerate(config["chats"], 1):
+                print(f"{PRIMARY_COLOR}{i}. {chat['chat_id']}{Style.RESET_ALL}")
+            
+            print(f"\n{PRIMARY_COLOR}Нажмите номер чата (0 для отмены): {Style.RESET_ALL}")
+            chat_choice = get_key_press()
+            
+            if chat_choice.isdigit():
+                if chat_choice == "0":
+                    continue
+                    
+                chat_num = int(chat_choice) - 1
+                if 0 <= chat_num < len(config["chats"]):
+                    configure_video_note_settings(config["chats"][chat_num])
+                    if config.get("sync_settings", False):
+                        sync_chat_settings(config)
+                    save_config(config)
+        
+        elif choice == "4":
             config["sync_settings"] = not config.get("sync_settings", False)
             status = "включена" if config["sync_settings"] else "выключена"
             print(f"{SUCCESS_COLOR}Синхронизация настроек {status}{Style.RESET_ALL}")
@@ -492,10 +533,17 @@ def manage_chats(config):
 
 def get_voice_file_path(filename):
     """Получает путь к голосовому файлу относительно папки программы"""
-    voices_dir = "voices"
-    if not os.path.exists(voices_dir):
-        os.makedirs(voices_dir)
-    return os.path.join(voices_dir, filename)
+    voice_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'voice')
+    if not os.path.exists(voice_dir):
+        os.makedirs(voice_dir)
+    return os.path.join(voice_dir, filename)
+
+def get_video_note_file_path(filename):
+    """Получает путь к файлу видео-кружка относительно папки программы"""
+    video_note_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'video_notes')
+    if not os.path.exists(video_note_dir):
+        os.makedirs(video_note_dir)
+    return os.path.join(video_note_dir, filename)
 
 def configure_voice_settings(chat_config):
     """Настройка голосовых сообщений для чата"""
@@ -573,12 +621,91 @@ def configure_voice_settings(chat_config):
         elif choice == "0":
             break
 
+def configure_video_note_settings(chat_config):
+    """Настройка видео-кружков (круговых видео) для чата"""
+    while True:
+        clear_console()
+        print(LOGO)
+        print(f"\n{PRIMARY_COLOR}{'='*50}")
+        print(f"{SECONDARY_COLOR}=== Настройка видео-кружков ===")
+        print(f"{PRIMARY_COLOR}{'='*50}{Style.RESET_ALL}")
+        
+        video_note_enabled = chat_config.get("video_note_enabled", False)
+        video_note_first = chat_config.get("video_note_first", False)
+        current_video_note = chat_config.get("video_note_file", "Не выбран")
+        if current_video_note and os.path.isabs(current_video_note):
+            current_video_note = os.path.basename(current_video_note)
+        
+        print(f"{SECONDARY_COLOR}1. Видео-кружки: {'Включены' if video_note_enabled else 'Выключены'}")
+        print(f"{SECONDARY_COLOR}2. Порядок отправки: {'Видео первым' if video_note_first else 'Текст первым'}")
+        print(f"{SECONDARY_COLOR}3. Выбрать видео-кружок (Текущее: {current_video_note})")
+        print(f"{SECONDARY_COLOR}0. Назад{Style.RESET_ALL}")
+        
+        print(f"\n{PRIMARY_COLOR}Нажмите клавишу (0-3): {Style.RESET_ALL}")
+        choice = get_key_press()
+        
+        if choice == "1":
+            chat_config["video_note_enabled"] = not video_note_enabled
+            status = "включены" if chat_config["video_note_enabled"] else "выключены"
+            print(f"{SUCCESS_COLOR}Видео-кружки {status}{Style.RESET_ALL}")
+            time.sleep(0.5)
+            
+        elif choice == "2":
+            chat_config["video_note_first"] = not video_note_first
+            status = "видео первым" if chat_config["video_note_first"] else "текст первым"
+            print(f"{SUCCESS_COLOR}Установлен порядок: {status}{Style.RESET_ALL}")
+            time.sleep(0.5)
+            
+        elif choice == "3":
+            # Кэшируем список файлов для быстрого доступа
+            video_notes_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'video_notes')
+            if not os.path.exists(video_notes_dir):
+                os.makedirs(video_notes_dir)
+            
+            video_note_files = [f for f in os.listdir(video_notes_dir) if f.endswith(('.mp4', '.avi', '.mov'))]
+            
+            if not video_note_files:
+                print(f"{WARN_COLOR}Нет доступных видео файлов в папке video_notes.{Style.RESET_ALL}")
+                print(f"{INFO_COLOR}Поместите файлы .mp4, .avi или .mov в папку video_notes.{Style.RESET_ALL}")
+                time.sleep(1.5)
+                continue
+            
+            # Показываем список в новом окне
+            clear_console()
+            print(LOGO)
+            print(f"\n{PRIMARY_COLOR}{'='*50}")
+            print(f"{SECONDARY_COLOR}=== Выбор видео-кружка ===")
+            print(f"{PRIMARY_COLOR}{'='*50}{Style.RESET_ALL}\n")
+            
+            for i, file in enumerate(video_note_files, 1):
+                print(f"{PRIMARY_COLOR}{i}. {file}{Style.RESET_ALL}")
+            
+            print(f"\n{PRIMARY_COLOR}Нажмите номер файла (0 для отмены): {Style.RESET_ALL}")
+            
+            file_choice = get_key_press()
+            if file_choice.isdigit():
+                if file_choice == "0":
+                    continue
+                    
+                file_num = int(file_choice) - 1
+                if 0 <= file_num < len(video_note_files):
+                    selected_file = video_note_files[file_num]
+                    chat_config["video_note_file"] = get_video_note_file_path(selected_file)
+                    print(f"{SUCCESS_COLOR}Выбран файл: {selected_file}{Style.RESET_ALL}")
+                    time.sleep(0.5)
+                
+        elif choice == "0":
+            break
+
 def clean_input(prompt=""):
     """
     Функция для корректного получения ввода от пользователя
     с предварительной очисткой буфера и форматированием
     """
-    sys.stdout.flush()  # Очищаем буфер вывода
+    try:
+        sys.stdout.flush()  # Очищаем буфер вывода
+    except AttributeError:
+        pass  # Пропускаем ошибку в случае отсутствия консоли
     print()  # Добавляем пустую строку для отделения
     return input(prompt).strip()  # Удаляем лишние пробелы
 
@@ -791,6 +918,15 @@ def check_required_files():
     else:
         print(f"{SUCCESS_COLOR}Папка voices найдена{Style.RESET_ALL}")
     
+    # Проверка и создание папки video_notes
+    video_notes_dir = "video_notes"
+    if not os.path.exists(video_notes_dir):
+        print(f"{WARN_COLOR}Папка video_notes не найдена. Создаю...{Style.RESET_ALL}")
+        os.makedirs(video_notes_dir)
+        print(f"{SUCCESS_COLOR}Папка video_notes создана успешно{Style.RESET_ALL}")
+    else:
+        print(f"{SUCCESS_COLOR}Папка video_notes найдена{Style.RESET_ALL}")
+    
     # Проверка наличия голосовых файлов
     voice_files = [f for f in os.listdir(voices_dir) if f.endswith(('.ogg', '.mp3', '.wav'))]
     if not voice_files:
@@ -798,6 +934,14 @@ def check_required_files():
         print(f"{INFO_COLOR}Поместите файлы .ogg, .mp3 или .wav в папку voices{Style.RESET_ALL}")
     else:
         print(f"{SUCCESS_COLOR}Найдено голосовых файлов: {len(voice_files)}{Style.RESET_ALL}")
+    
+    # Проверка наличия видео файлов для кружков
+    video_files = [f for f in os.listdir(video_notes_dir) if f.endswith(('.mp4', '.avi', '.mov', '.mkv'))]
+    if not video_files:
+        print(f"{WARN_COLOR}В папке video_notes нет видео файлов{Style.RESET_ALL}")
+        print(f"{INFO_COLOR}Поместите видео файлы в папку video_notes для отправки круговых видео{Style.RESET_ALL}")
+    else:
+        print(f"{SUCCESS_COLOR}Найдено видео файлов: {len(video_files)}{Style.RESET_ALL}")
     
     # Проверка конфига
     if not os.path.exists(CONFIG_FILE):
