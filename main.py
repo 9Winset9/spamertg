@@ -703,7 +703,8 @@ def clean_input(prompt=""):
     с предварительной очисткой буфера и форматированием
     """
     try:
-        sys.stdout.flush()  # Очищаем буфер вывода
+        if sys.stdout is not None:
+            sys.stdout.flush()  # Очищаем буфер вывода
     except AttributeError:
         pass  # Пропускаем ошибку в случае отсутствия консоли
     print()  # Добавляем пустую строку для отделения
