@@ -6,7 +6,7 @@ import os
 from telethon import types
 from utils.logger import logger
 
-class AnonimnyyChatBotWorker:
+class AnonymnyiChatBotWorker:
     def __init__(self, client, chat_config, message_queue):
         self.client = client
         self.chat_config = chat_config
@@ -15,7 +15,7 @@ class AnonimnyyChatBotWorker:
         self.message_count = 0
         self.status = "Ожидание"
         self.status_color = Fore.YELLOW
-        self.bot_username = "@anonimnyychatbot"
+        self.bot_username = "@Anonymnyi_chat_bot"
 
     async def update_status(self, status, color=Fore.YELLOW):
         self.status = status
@@ -40,7 +40,7 @@ class AnonimnyyChatBotWorker:
                 await self.client.send_message(self.chat_config["chat_id"], "/next")
                 await asyncio.sleep(self.chat_config["delays"]["next_command"])
 
-                # 2. Ждем сообщение "Нашёл кое-кого для тебя!" только от бота
+                # 2. Ждем сообщение "собеседник найден" только от бота
                 await self.update_status("Ожидание собеседника", Fore.YELLOW)
                 partner_found = False
                 start_time = time.time()
@@ -48,7 +48,7 @@ class AnonimnyyChatBotWorker:
                 while time.time() - start_time < self.chat_config["delays"]["message_timeout"]:
                     messages = await self.client.get_messages(self.chat_config["chat_id"], limit=5)
                     for msg in messages:
-                        if await self.is_message_from_bot(msg) and msg.text and "Нашёл кое-кого для тебя!" in msg.text:
+                        if await self.is_message_from_bot(msg) and msg.text and "собеседник найден" in msg.text.lower():
                             partner_found = True
                             break
                     if partner_found:
@@ -152,6 +152,3 @@ class AnonimnyyChatBotWorker:
                 except KeyError:
                     await self.update_status("Ошибка в конфигурации задержек", Fore.RED)
                     await asyncio.sleep(10)  # Default delay if "error_retry" is not set
-
-    def stop(self):
-        self.is_running = False

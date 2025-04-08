@@ -4,6 +4,7 @@ from colorama import Fore, Style
 import time
 import os
 from telethon import types
+from utils.logger import logger
 
 class AnonRuBotWorker:
     def __init__(self, client, chat_config, message_queue):
@@ -19,7 +20,9 @@ class AnonRuBotWorker:
     async def update_status(self, status, color=Fore.YELLOW):
         self.status = status
         self.status_color = color
-        self.message_queue.put(("status", self.chat_config["chat_id"], status, color))
+        console_msg = logger.log(self.bot_username, status, color)
+        self.message_queue.put(("status", self.chat_config["chat_id"], console_msg, color))
+        self.message_queue.put(("message", self.chat_config["chat_id"], self.message_count))
 
     async def is_message_from_bot(self, message):
         """Проверяет, что сообщение от нужного бота"""
@@ -69,11 +72,9 @@ class AnonRuBotWorker:
                 video_note_file = self.chat_config.get("video_note_file")
                 video_note_first = self.chat_config.get("video_note_first", True)
                 
-                message = self.chat_config["messages"][0]  # Берем первое сообщение
+                message = self.chat_config["messages"][0]
 
                 # Определяем порядок отправки
-                
-                # Отправка голосового сообщения первым
                 if voice_enabled and voice_file and voice_first:
                     if os.path.exists(voice_file):
                         await self.update_status(f"Отправка голосового сообщения", Fore.CYAN)
@@ -87,39 +88,31 @@ class AnonRuBotWorker:
                         except Exception as e:
                             await self.update_status(f"Ошибка отправки голосового: {str(e)}", Fore.RED)
                 
-                # Отправка видео-кружка первым
                 elif video_note_enabled and video_note_file and video_note_first:
                     if os.path.exists(video_note_file):
                         await self.update_status(f"Отправка видео-кружка", Fore.CYAN)
                         try:
-                            # Открываем файл в бинарном режиме для отправки как видео-заметка
                             with open(video_note_file, 'rb') as video_file:
                                 await self.client.send_file(
                                     self.chat_config["chat_id"],
                                     video_file,
-                                    video_note=True,
-                                    attributes=[
-                                        # Добавляем атрибуты для видео-заметки
-                                        types.DocumentAttributeVideo(
-                                            duration=0,  # Длительность определится автоматически
-                                            w=1,  # Ширина (не важна для видео-заметок)
-                                            h=1,  # Высота (не важна для видео-заметок)
-                                            round_message=True  # Это делает видео круглым (видео-заметкой)
-                                        )
-                                    ]
+                                    video_note=True
                                 )
                             await asyncio.sleep(self.chat_config["delays"]["between_messages"])
                         except Exception as e:
                             await self.update_status(f"Ошибка отправки видео-кружка: {str(e)}", Fore.RED)
-                
-                # Отправка текстового сообщения
+
+                # Отправляем текстовое сообщение
                 await self.update_status(f"Отправка: {message}", Fore.CYAN)
-                await self.client.send_message(self.chat_config["chat_id"], message)
-                
-                # Отправка голосового сообщения после текста
+                try:
+                    await self.client.send_message(self.chat_config["chat_id"], message)
+                    await asyncio.sleep(self.chat_config["delays"]["between_messages"])
+                except Exception as e:
+                    await self.update_status(f"Ошибка отправки текста: {str(e)}", Fore.RED)
+
+                # Отправляем оставшиеся голосовые сообщения
                 if voice_enabled and voice_file and not voice_first:
                     if os.path.exists(voice_file):
-                        await asyncio.sleep(self.chat_config["delays"]["between_messages"])
                         await self.update_status(f"Отправка голосового сообщения", Fore.CYAN)
                         try:
                             await self.client.send_file(
@@ -129,41 +122,36 @@ class AnonRuBotWorker:
                             )
                         except Exception as e:
                             await self.update_status(f"Ошибка отправки голосового: {str(e)}", Fore.RED)
-                
-                # Отправка видео-кружка после текста
+
+                # Отправляем оставшиеся видео-кружки
                 elif video_note_enabled and video_note_file and not video_note_first:
                     if os.path.exists(video_note_file):
-                        await asyncio.sleep(self.chat_config["delays"]["between_messages"])
                         await self.update_status(f"Отправка видео-кружка", Fore.CYAN)
                         try:
-                            # Открываем файл в бинарном режиме для отправки как видео-заметка
                             with open(video_note_file, 'rb') as video_file:
                                 await self.client.send_file(
                                     self.chat_config["chat_id"],
                                     video_file,
-                                    video_note=True,
-                                    attributes=[
-                                        # Добавляем атрибуты для видео-заметки
-                                        types.DocumentAttributeVideo(
-                                            duration=0,  # Длительность определится автоматически
-                                            w=1,  # Ширина (не важна для видео-заметок)
-                                            h=1,  # Высота (не важна для видео-заметок)
-                                            round_message=True  # Это делает видео круглым (видео-заметкой)
-                                        )
-                                    ]
+                                    video_note=True
                                 )
                         except Exception as e:
                             await self.update_status(f"Ошибка отправки видео-кружка: {str(e)}", Fore.RED)
 
                 self.message_count += 1
-                self.message_queue.put(("message", self.chat_config["chat_id"], self.message_count))
-
-                # 4. Ждем перед следующим циклом
-                await asyncio.sleep(self.chat_config["delays"]["before_cycle"])
+                await self.update_status(f"Отправка: {message}", Fore.GREEN)
+                try:
+                    await asyncio.sleep(self.chat_config["delays"]["between_sessions"])
+                except KeyError:
+                    await self.update_status("Ошибка в конфигурации задержек", Fore.RED)
+                    await asyncio.sleep(10)  # Default delay if "between_sessions" is not set
 
             except Exception as e:
-                await self.update_status(f"Ошибка: {str(e)}", Fore.RED)
-                await asyncio.sleep(self.chat_config["delays"]["error_retry"])
+                await self.update_status(f"Ошибка в основном цикле: {str(e)}", Fore.RED)
+                try:
+                    await asyncio.sleep(self.chat_config["delays"]["error_retry"])
+                except KeyError:
+                    await self.update_status("Ошибка в конфигурации задержек", Fore.RED)
+                    await asyncio.sleep(10)  # Default delay if "error_retry" is not set
 
     def stop(self):
-        self.is_running = False 
+        self.is_running = False

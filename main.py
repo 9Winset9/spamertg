@@ -11,12 +11,13 @@ import logging
 from datetime import datetime
 from chats.AnonRuBot import AnonRuBotWorker
 from chats.AnonimnyyChatBot import AnonimnyyChatBotWorker
-import ctypes
-from dotenv import load_dotenv
+from chats.AnonymnyiChatBot import AnonymnyiChatBotWorker
 import sys
 import win32gui  # Добавляем импорт для работы с окнами Windows
 import win32process
 import win32api
+from dotenv import load_dotenv
+import ctypes
 
 # Загружаем переменные окружения
 load_dotenv()
@@ -29,11 +30,14 @@ ctypes.windll.kernel32.SetConsoleTitleW(WINDOW_TITLE)
 init()
 
 # Настройка логирования
+if not os.path.exists('logs'):
+    os.makedirs('logs')
+
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler('bot.log'),
+        logging.FileHandler(os.path.join('logs', 'bot.log'), encoding='utf-8'),
         logging.StreamHandler()
     ]
 )
@@ -68,7 +72,8 @@ def create_default_config():
         "next_command": 2,
         "partner_found": 2,
         "before_cycle": 2,
-        "check_messages": 1
+        "check_messages": 1,
+        "between_sessions": 5
     },
     "chats": [
         {
@@ -77,7 +82,8 @@ def create_default_config():
             "voice_enabled": False,
             "voice_first": False,
             "video_note_enabled": False,
-            "video_note_first": False
+            "video_note_first": False,
+            "worker_class": "AnonRuBotWorker"
         },
         {
             "chat_id": "@anonimnyychatbot",
@@ -85,7 +91,17 @@ def create_default_config():
             "voice_enabled": False,
             "voice_first": False,
             "video_note_enabled": False,
-            "video_note_first": False
+            "video_note_first": False,
+            "worker_class": "AnonimnyyChatBotWorker"
+        },
+        {
+            "chat_id": "@Anonymnyi_chat_bot",
+            "enabled": True,
+            "voice_enabled": False,
+            "voice_first": False,
+            "video_note_enabled": False,
+            "video_note_first": False,
+            "worker_class": "AnonymnyiChatBotWorker"
         }
     ],
     "messages": ["привет"]
@@ -316,31 +332,70 @@ def manage_messages(config):
 
 def configure_delays(config):
     """Настройка задержек"""
+    delays = [
+        ("Задержка между сообщениями", "between_messages"),
+        ("Задержка после старта диалога", "after_start"),
+        ("Задержка перед поиском нового собеседника", "before_next"),
+        ("Задержка при ошибке", "error_retry"),
+        ("Таймаут ожидания сообщения", "message_timeout"),
+        ("Задержка после команды /next", "next_command"),
+        ("Задержка после нахождения собеседника", "partner_found"),
+        ("Задержка перед следующим циклом", "before_cycle"),
+        ("Задержка между проверками сообщений", "check_messages"),
+        ("Задержка между сессиями", "between_sessions")
+    ]
+    
+    current_page = 0
+    items_per_page = 8
+    
     while True:
         clear_console()
         print(LOGO)
         print(f"\n{PRIMARY_COLOR}{'='*50}")
         print(f"{SECONDARY_COLOR}=== Настройка задержек ===")
         print(f"{PRIMARY_COLOR}{'='*50}{Style.RESET_ALL}")
-        print(f"{SECONDARY_COLOR}1. Задержка между сообщениями: {config['delays']['between_messages']} сек")
-        print(f"{SECONDARY_COLOR}2. Задержка после старта диалога: {config['delays']['after_start']} сек")
-        print(f"{SECONDARY_COLOR}3. Задержка перед поиском нового собеседника: {config['delays']['before_next']} сек")
-        print(f"{SECONDARY_COLOR}4. Задержка при ошибке: {config['delays']['error_retry']} сек")
-        print(f"{SECONDARY_COLOR}5. Таймаут ожидания сообщения: {config['delays']['message_timeout']} сек")
-        print(f"{SECONDARY_COLOR}6. Задержка после команды /next: {config['delays']['next_command']} сек")
-        print(f"{SECONDARY_COLOR}7. Задержка после нахождения собеседника: {config['delays']['partner_found']} сек")
-        print(f"{SECONDARY_COLOR}8. Задержка перед следующим циклом: {config['delays']['before_cycle']} сек")
-        print(f"{SECONDARY_COLOR}9. Задержка между проверками сообщений: {config['delays']['check_messages']} сек")
-        print(f"{SECONDARY_COLOR}0. Назад{Style.RESET_ALL}")
+        
+        # Calculate current page range
+        start_idx = current_page * items_per_page
+        end_idx = min(start_idx + items_per_page, len(delays))
+        
+        # Display delays for current page
+        for i, (name, key) in enumerate(delays[start_idx:end_idx], 1):
+            print(f"{SECONDARY_COLOR}{i}. {name}: {config['delays'][key]} сек")
+        
+        # Display navigation options
+        print(f"\n{SECONDARY_COLOR}=== Навигация ===")
+        if current_page > 0:
+            print(f"{SECONDARY_COLOR}0. Выход")
+            print(f"{SECONDARY_COLOR}9. Предыдущая страница")
+        else:
+            print(f"{SECONDARY_COLOR}0. Выход")
+            print(f"{SECONDARY_COLOR}9. Следующая страница")
         
         print(f"\n{PRIMARY_COLOR}Нажмите клавишу (0-9): {Style.RESET_ALL}")
         choice = get_key_press()
         
         if choice == "0":
             break
+        elif choice == "9":
+            if current_page > 0:
+                current_page -= 1
+            elif end_idx < len(delays):
+                current_page += 1
+            continue
             
         try:
-            if choice in ["1", "2", "3", "4", "5", "6", "7", "8", "9"]:
+            if choice in ["1", "2", "3", "4", "5", "6", "7", "8"]:
+                # Convert choice to 0-based index
+                idx = int(choice) - 1
+                # Add current page offset
+                if idx + start_idx >= len(delays):
+                    print(f"{ERROR_COLOR}Неверный выбор. Попробуйте снова.{Style.RESET_ALL}")
+                    print(f"{SECONDARY_COLOR}Нажмите любую клавишу для продолжения...{Style.RESET_ALL}")
+                    get_key_press()
+                    continue
+                
+                _, key = delays[idx + start_idx]
                 delay = int(clean_input(f"{SECONDARY_COLOR}Введите новое значение задержки в секундах: {Style.RESET_ALL}"))
                 if delay < 0:
                     print(f"{ERROR_COLOR}Ошибка: задержка не может быть отрицательной{Style.RESET_ALL}")
@@ -348,25 +403,7 @@ def configure_delays(config):
                     get_key_press()
                     continue
                 
-                if choice == "1":
-                    config["delays"]["between_messages"] = delay
-                elif choice == "2":
-                    config["delays"]["after_start"] = delay
-                elif choice == "3":
-                    config["delays"]["before_next"] = delay
-                elif choice == "4":
-                    config["delays"]["error_retry"] = delay
-                elif choice == "5":
-                    config["delays"]["message_timeout"] = delay
-                elif choice == "6":
-                    config["delays"]["next_command"] = delay
-                elif choice == "7":
-                    config["delays"]["partner_found"] = delay
-                elif choice == "8":
-                    config["delays"]["before_cycle"] = delay
-                elif choice == "9":
-                    config["delays"]["check_messages"] = delay
-                
+                config["delays"][key] = delay
                 save_config(config)
                 print(f"{SUCCESS_COLOR}Задержка успешно изменена{Style.RESET_ALL}")
                 print(f"{SECONDARY_COLOR}Нажмите любую клавишу для продолжения...{Style.RESET_ALL}")
@@ -392,7 +429,19 @@ def sync_chat_settings(config):
         "voice_file": config["chats"][0].get("voice_file", None),
         "video_note_enabled": config["chats"][0].get("video_note_enabled", False),
         "video_note_first": config["chats"][0].get("video_note_first", False),
-        "video_note_file": config["chats"][0].get("video_note_file", None)
+        "video_note_file": config["chats"][0].get("video_note_file", None),
+        "delays": config["chats"][0].get("delays", {
+            "between_messages": 1,
+            "after_start": 2,
+            "before_next": 2,
+            "error_retry": 2,
+            "message_timeout": 300,
+            "next_command": 2,
+            "partner_found": 2,
+            "before_cycle": 2,
+            "check_messages": 1,
+            "between_sessions": 5
+        })
     }
     
     # Применяем ко всем остальным чатам
@@ -437,10 +486,10 @@ def manage_chats(config):
                 print(f"{PRIMARY_COLOR}{i}. {chat['chat_id']} - {status}{voice_status}{video_note_status}{Style.RESET_ALL}")
         
         print(f"\n{SECONDARY_COLOR}1. Включить/выключить чат")
-        print(f"2. Настройка голосовых сообщений")
-        print(f"3. Настройка видео-кружков")
-        print(f"4. Включить/выключить синхронизацию")
-        print(f"0. Назад{Style.RESET_ALL}")
+        print(f"{SECONDARY_COLOR}2. Настройка голосовых сообщений")
+        print(f"{SECONDARY_COLOR}3. Настройка видео-кружков")
+        print(f"{SECONDARY_COLOR}4. Включить/выключить синхронизацию")
+        print(f"{SECONDARY_COLOR}0. Назад{Style.RESET_ALL}")
         
         print(f"\n{PRIMARY_COLOR}Нажмите клавишу (0-4): {Style.RESET_ALL}")
         choice = get_key_press()
@@ -718,8 +767,15 @@ class ConsoleUI:
     def __init__(self):
         self.chat_statuses = {}
         self.message_counts = {}
+        self.start_time = time.time()
         self.last_update = time.time()
         self.update_interval = 1.0  # Обновление каждую секунду
+
+    def format_time(self):
+        """Форматирует время работы в формате MM:SS"""
+        elapsed_time = time.time() - self.start_time
+        minutes, seconds = divmod(int(elapsed_time), 60)
+        return f"{minutes:02d}:{seconds:02d}"
 
     def update(self, message_queue):
         current_time = time.time()
@@ -733,22 +789,22 @@ class ConsoleUI:
         print(f"{SECONDARY_COLOR}=== Статус рассылки ===")
         print(f"{PRIMARY_COLOR}{'='*50}{Style.RESET_ALL}")
         print(f"{SECONDARY_COLOR}Нажмите Ctrl+C для остановки")
-        print(f"{SECONDARY_COLOR}Нажмите 'q' для выхода в меню{Style.RESET_ALL}\n")
+        print(f"{SECONDARY_COLOR}Нажмите 'q' для выхода в меню")
+        print(f"{PRIMARY_COLOR}Время работы: {self.format_time()}{Style.RESET_ALL}\n")
 
         while not message_queue.empty():
             msg_type, chat_id, *args = message_queue.get()
             if msg_type == "status":
-                self.chat_statuses[chat_id] = (args[0], args[1])
+                # Удаляем время из статуса
+                status = args[0].split(" | ")[0]  # Берем только первую часть статуса
+                self.chat_statuses[chat_id] = (status, args[1])
             elif msg_type == "message":
                 self.message_counts[chat_id] = args[0]
 
-        # Вывод состояния всех чатов в одну строку
-        status_line = []
+        # Вывод состояния каждого чата на новой строке
         for chat_id, (status, color) in self.chat_statuses.items():
             count = self.message_counts.get(chat_id, 0)
-            status_line.append(f"{color}{chat_id}: {status} ({count} сообщений){Style.RESET_ALL}")
-        
-        print(" | ".join(status_line))
+            print(f"{color}{chat_id}: {status} ({count} сообщений){Style.RESET_ALL}")
 
 async def send_messages(client, config):
     """Отправка всех сообщений в указанные чаты"""
@@ -770,10 +826,12 @@ async def send_messages(client, config):
                     chat['delays'] = config['delays']
                     
                     # Создаем соответствующий воркер в зависимости от чата
-                    if chat['chat_id'] == "@AnonRuBot":
+                    if chat['worker_class'] == "AnonRuBotWorker":
                         worker = AnonRuBotWorker(client, chat, message_queue)
-                    elif chat['chat_id'] == "@anonimnyychatbot":
+                    elif chat['worker_class'] == "AnonimnyyChatBotWorker":
                         worker = AnonimnyyChatBotWorker(client, chat, message_queue)
+                    elif chat['worker_class'] == "AnonymnyiChatBotWorker":
+                        worker = AnonymnyiChatBotWorker(client, chat, message_queue)
                     else:
                         continue
                         

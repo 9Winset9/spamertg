@@ -8,3 +8,5 @@
 /__pycache__
 releases/TGSPAMER.exe
 main.spec
+logs/bot.log
+logs/*.txt
