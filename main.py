@@ -19,6 +19,16 @@ import win32api
 from dotenv import load_dotenv
 import ctypes
 
+def get_base_path():
+    """Получает путь к директории исполняемого файла"""
+    if getattr(sys, 'frozen', False):
+        # Если запущено как запакованный exe
+        base_path = os.path.dirname(sys.executable)
+    else:
+        # Если запущено как скрипт
+        base_path = os.path.dirname(os.path.abspath(__file__))
+    return base_path
+
 # Загружаем переменные окружения
 load_dotenv()
 
@@ -30,17 +40,22 @@ ctypes.windll.kernel32.SetConsoleTitleW(WINDOW_TITLE)
 init()
 
 # Настройка логирования
-if not os.path.exists('logs'):
-    os.makedirs('logs')
+base_path = get_base_path()
+logs_dir = os.path.join(base_path, 'logs')
+if not os.path.exists(logs_dir):
+    os.makedirs(logs_dir)
 
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler(os.path.join('logs', 'bot.log'), encoding='utf-8'),
-        logging.StreamHandler()
-    ]
-)
+logger = logging.getLogger('TGSPAMER')
+logger.setLevel(logging.INFO)
+
+log_file = os.path.join(logs_dir, f'TGSPAMER_{datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}.log')
+file_handler = logging.FileHandler(log_file, encoding='utf-8')
+file_handler.setLevel(logging.INFO)
+
+formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+file_handler.setFormatter(formatter)
+
+logger.addHandler(file_handler)
 
 LOGO = f"""{Fore.MAGENTA}
   _____ _____ _____ _____ _____ _____ _____ _____ 
@@ -57,8 +72,8 @@ INFO_COLOR = Fore.LIGHTBLUE_EX    # Цвет информации (яркий с
 WARN_COLOR = Fore.LIGHTMAGENTA_EX # Цвет предупреждений (яркий фиолетовый)
 
 # Файлы конфигурации
-CONFIG_FILE = "config.json"
-ENV_FILE = ".env"
+CONFIG_FILE = os.path.join(base_path, "config.json")
+ENV_FILE = os.path.join(base_path, ".env")
 
 def create_default_config():
     """Создание стандартного конфига"""
@@ -531,6 +546,7 @@ def manage_chats(config):
                 print(f"{PRIMARY_COLOR}{i}. {chat['chat_id']}{Style.RESET_ALL}")
             
             print(f"\n{PRIMARY_COLOR}Нажмите номер чата (0 для отмены): {Style.RESET_ALL}")
+            
             chat_choice = get_key_press()
             
             if chat_choice.isdigit():
@@ -555,6 +571,7 @@ def manage_chats(config):
                 print(f"{PRIMARY_COLOR}{i}. {chat['chat_id']}{Style.RESET_ALL}")
             
             print(f"\n{PRIMARY_COLOR}Нажмите номер чата (0 для отмены): {Style.RESET_ALL}")
+            
             chat_choice = get_key_press()
             
             if chat_choice.isdigit():
@@ -580,19 +597,25 @@ def manage_chats(config):
         elif choice == "0":
             break
 
+def get_video_notes_path():
+    """Получает путь к папке с видео-кружками"""
+    base_path = get_base_path()
+    return os.path.join(base_path, 'video_notes')
+
 def get_voice_file_path(filename):
     """Получает путь к голосовому файлу относительно папки программы"""
-    voice_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'voice')
+    base_path = get_base_path()
+    voice_dir = os.path.join(base_path, 'voice')
     if not os.path.exists(voice_dir):
         os.makedirs(voice_dir)
     return os.path.join(voice_dir, filename)
 
 def get_video_note_file_path(filename):
     """Получает путь к файлу видео-кружка относительно папки программы"""
-    video_note_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'video_notes')
-    if not os.path.exists(video_note_dir):
-        os.makedirs(video_note_dir)
-    return os.path.join(video_note_dir, filename)
+    video_notes_dir = get_video_notes_path()
+    if not os.path.exists(video_notes_dir):
+        os.makedirs(video_notes_dir)
+    return os.path.join(video_notes_dir, filename)
 
 def configure_voice_settings(chat_config):
     """Настройка голосовых сообщений для чата"""
@@ -631,15 +654,16 @@ def configure_voice_settings(chat_config):
             
         elif choice == "3":
             # Кэшируем список файлов для быстрого доступа
-            voices_dir = "voices"
-            if not os.path.exists(voices_dir):
-                os.makedirs(voices_dir)
+            base_path = get_base_path()
+            voice_dir = os.path.join(base_path, "voice")
+            if not os.path.exists(voice_dir):
+                os.makedirs(voice_dir)
             
-            voice_files = [f for f in os.listdir(voices_dir) if f.endswith(('.ogg', '.mp3', '.wav'))]
+            voice_files = [f for f in os.listdir(voice_dir) if f.endswith(('.ogg', '.mp3', '.wav'))]
             
             if not voice_files:
-                print(f"{WARN_COLOR}Нет доступных голосовых файлов в папке voices.{Style.RESET_ALL}")
-                print(f"{INFO_COLOR}Поместите файлы .ogg, .mp3 или .wav в папку voices.{Style.RESET_ALL}")
+                print(f"{WARN_COLOR}Нет доступных голосовых файлов в папке voice.{Style.RESET_ALL}")
+                print(f"{INFO_COLOR}Поместите файлы .ogg, .mp3 или .wav в папку voice.{Style.RESET_ALL}")
                 time.sleep(1.5)
                 continue
             
@@ -707,7 +731,7 @@ def configure_video_note_settings(chat_config):
             
         elif choice == "3":
             # Кэшируем список файлов для быстрого доступа
-            video_notes_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'video_notes')
+            video_notes_dir = get_video_notes_path()
             if not os.path.exists(video_notes_dir):
                 os.makedirs(video_notes_dir)
             
@@ -806,7 +830,7 @@ class ConsoleUI:
             count = self.message_counts.get(chat_id, 0)
             print(f"{color}{chat_id}: {status} ({count} сообщений){Style.RESET_ALL}")
 
-async def send_messages(client, config):
+async def send_messages(client, config, message_queue):
     """Отправка всех сообщений в указанные чаты"""
     if 'chats' in config and 'messages' in config:
         if not config['messages']:
@@ -814,7 +838,6 @@ async def send_messages(client, config):
             return
             
         try:
-            message_queue = Queue()
             console_ui = ConsoleUI()
             workers = []
 
@@ -910,6 +933,37 @@ async def send_messages(client, config):
     else:
         print(f"{ERROR_COLOR}Ошибка: в конфигурации отсутствуют данные чатов или сообщения{Style.RESET_ALL}")
 
+async def send_messages_worker(client, chat_config, message_queue):
+    """Функция для отправки сообщений в чат"""
+    while True:
+        try:
+            # Получаем сообщение из очереди
+            message = await message_queue.get()
+            if message is None:
+                break
+
+            # Отправляем сообщение
+            await client.send_message(chat_config["chat_id"], message)
+
+            # Если включены голосовые сообщения
+            if chat_config.get("voice_enabled", False):
+                voice_file = chat_config.get("voice_file")
+                if voice_file and os.path.exists(voice_file):
+                    await client.send_file(chat_config["chat_id"], voice_file, voice_note=True)
+
+            # Если включены видео-кружки
+            if chat_config.get("video_note_enabled", False):
+                video_note_file = chat_config.get("video_note_file")
+                if video_note_file and os.path.exists(video_note_file):
+                    await client.send_file(chat_config["chat_id"], video_note_file, video_note=True)
+
+            # Ждем между отправками
+            await asyncio.sleep(chat_config["delays"]["between_messages"])
+
+        except Exception as e:
+            print(f"{ERROR_COLOR}Ошибка при отправке сообщения: {str(e)}{Style.RESET_ALL}")
+            await asyncio.sleep(chat_config["delays"]["error_retry"])
+
 async def wait_for_message(client, chat_id, target_message, timeout=300):
     """Ожидание определенного сообщения в чате"""
     print(f"\n{PRIMARY_COLOR}Ожидание сообщения '{target_message}'...{Style.RESET_ALL}")
@@ -956,7 +1010,7 @@ async def run_script():
         print(f"{SUCCESS_COLOR}Подключение успешно!{Style.RESET_ALL}")
         
         print(f"\n{INFO_COLOR}Начинаю отправку сообщений...{Style.RESET_ALL}")
-        await send_messages(client, config)
+        await send_messages(client, config, Queue())
         print(f"\n{SUCCESS_COLOR}Отправка сообщений завершена!{Style.RESET_ALL}")
         
     except Exception as e:
@@ -969,16 +1023,17 @@ def check_required_files():
     print(f"\n{PRIMARY_COLOR}Проверка необходимых файлов и папок...{Style.RESET_ALL}")
     
     # Проверка и создание папки voices
-    voices_dir = "voices"
-    if not os.path.exists(voices_dir):
-        print(f"{WARN_COLOR}Папка voices не найдена. Создаю...{Style.RESET_ALL}")
-        os.makedirs(voices_dir)
-        print(f"{SUCCESS_COLOR}Папка voices создана успешно{Style.RESET_ALL}")
+    base_path = get_base_path()
+    voice_dir = os.path.join(base_path, "voice")
+    if not os.path.exists(voice_dir):
+        print(f"{WARN_COLOR}Папка voice не найдена. Создаю...{Style.RESET_ALL}")
+        os.makedirs(voice_dir)
+        print(f"{SUCCESS_COLOR}Папка voice создана успешно{Style.RESET_ALL}")
     else:
-        print(f"{SUCCESS_COLOR}Папка voices найдена{Style.RESET_ALL}")
+        print(f"{SUCCESS_COLOR}Папка voice найдена{Style.RESET_ALL}")
     
     # Проверка и создание папки video_notes
-    video_notes_dir = "video_notes"
+    video_notes_dir = get_video_notes_path()
     if not os.path.exists(video_notes_dir):
         print(f"{WARN_COLOR}Папка video_notes не найдена. Создаю...{Style.RESET_ALL}")
         os.makedirs(video_notes_dir)
@@ -987,7 +1042,7 @@ def check_required_files():
         print(f"{SUCCESS_COLOR}Папка video_notes найдена{Style.RESET_ALL}")
     
     # Проверка наличия голосовых файлов
-    voice_files = [f for f in os.listdir(voices_dir) if f.endswith(('.ogg', '.mp3', '.wav'))]
+    voice_files = [f for f in os.listdir(voice_dir) if f.endswith(('.ogg', '.mp3', '.wav'))]
     if not voice_files:
         print(f"{WARN_COLOR}В папке voices нет голосовых файлов{Style.RESET_ALL}")
         print(f"{INFO_COLOR}Поместите файлы .ogg, .mp3 или .wav в папку voices{Style.RESET_ALL}")

@@ -1,4 +1,5 @@
 /.env
+/*.spec
 /bot.log
 /build
 /config.json
@@ -10,3 +11,4 @@ releases/TGSPAMER.exe
 main.spec
 logs/bot.log
 logs/*.txt
+

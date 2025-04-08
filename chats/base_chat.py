@@ -3,10 +3,10 @@ import asyncio
 from colorama import Fore, Style
 import time
 import os
+import sys
 from telethon import types
-from utils.logger import logger
 
-class AnonymnyiChatBotWorker:
+class BaseChatWorker:
     def __init__(self, client, chat_config, message_queue):
         self.client = client
         self.chat_config = chat_config
@@ -15,12 +15,14 @@ class AnonymnyiChatBotWorker:
         self.message_count = 0
         self.status = "Ожидание"
         self.status_color = Fore.YELLOW
-        self.bot_username = "@Anonymnyi_chat_bot"
+        self.bot_username = None  # Will be set by child classes
+        self.partner_message = None  # Will be set by child classes
 
     async def update_status(self, status, color=Fore.YELLOW):
+        """Обновляет статус и отправляет его в очередь"""
         self.status = status
         self.status_color = color
-        console_msg = logger.log(self.bot_username, status, color)
+        console_msg = f"{color}{self.bot_username}: {status}{Style.RESET_ALL}"
         self.message_queue.put(("status", self.chat_config["chat_id"], console_msg, color))
         self.message_queue.put(("message", self.chat_config["chat_id"], self.message_count))
 
@@ -32,40 +34,66 @@ class AnonymnyiChatBotWorker:
         except:
             return False
 
+    def get_media_path(self, relative_path):
+        """Получает правильный путь к медиафайлу"""
+        # Получаем абсолютный путь к директории проекта
+        project_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        # Строим полный путь к файлу
+        full_path = os.path.join(project_dir, relative_path)
+        # Нормализуем путь для Windows
+        return os.path.normpath(full_path)
+
     async def send_media(self, file_path, voice_note=False, video_note=False):
+        """Отправляет медиафайл с правильными атрибутами"""
         try:
-            if voice_note:
+            # Получаем правильный путь к файлу
+            file_path = self.get_media_path(file_path)
+            
+            if not os.path.exists(file_path):
+                await self.update_status(f"Файл не найден: {file_path}", Fore.RED)
+                return False
+
+            # Проверяем размер файла
+            file_size = os.path.getsize(file_path)
+            if file_size > 50 * 1024 * 1024:  # 50MB limit
+                await self.update_status(f"Файл слишком большой: {file_size/1024/1024:.1f}MB", Fore.RED)
+                return False
+
+            await self.update_status(f"Отправка медиафайла: {file_path}", Fore.CYAN)
+
+            # Открываем файл в бинарном режиме
+            with open(file_path, 'rb') as file:
+                # Отправляем файл с правильными атрибутами
                 await self.client.send_file(
                     self.chat_config["chat_id"],
-                    file_path,
-                    voice_note=True,
-                    attributes=[types.DocumentAttributeAudio(
-                        duration=0,  # Длительность определится автоматически
-                        voice=True
-                    )]
+                    file,
+                    voice_note=voice_note,
+                    video_note=video_note,
+                    attributes=[
+                        types.DocumentAttributeAudio(
+                            duration=0,
+                            voice=voice_note
+                        ) if voice_note else types.DocumentAttributeVideo(
+                            duration=0,
+                            w=1,
+                            h=1,
+                            round_message=True
+                        )
+                    ],
+                    force_document=False
                 )
-            elif video_note:
-                await self.client.send_file(
-                    self.chat_config["chat_id"],
-                    file_path,
-                    video_note=True,
-                    attributes=[types.DocumentAttributeVideo(
-                        duration=0,
-                        w=1,
-                        h=1,
-                        round_message=True
-                    )]
-                )
+
             return True
         except Exception as e:
             await self.update_status(f"Ошибка отправки медиа: {str(e)}", Fore.RED)
             return False
 
     async def run(self):
+        """Основной цикл работы чата"""
         while self.is_running:
             try:
                 # 1. Отправляем команду для поиска собеседника
-                await self.update_status("Отправка /next", Fore.BLUE)
+                await self.update_status("Отправка команды поиска", Fore.BLUE)
                 await self.client.send_message(self.chat_config["chat_id"], "/next")
                 await asyncio.sleep(self.chat_config["delays"]["next_command"])
 
@@ -77,7 +105,7 @@ class AnonymnyiChatBotWorker:
                 while time.time() - start_time < self.chat_config["delays"]["message_timeout"]:
                     messages = await self.client.get_messages(self.chat_config["chat_id"], limit=5)
                     for msg in messages:
-                        if await self.is_message_from_bot(msg) and msg.text and "собеседник найден" in msg.text.lower():
+                        if await self.is_message_from_bot(msg) and msg.text and self.partner_message in msg.text.lower():
                             partner_found = True
                             break
                     if partner_found:
